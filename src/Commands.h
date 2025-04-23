@@ -31,6 +31,198 @@ struct Vel
   int16_t vel_L;
   int16_t vel_R;
 };
+//SDO saga
+void SDO_upload_initiate(uint8_t nodeID){
+  tCANMsgObject msg;
+  uint8_t data[8];
+  msg.ui32MsgID = 0x600 + nodeID; // SDO send
+  msg.ui32MsgIDMask = 0;
+  msg.ui32Flags = 0;
+  msg.ui32MsgLen = 8;
+  data[0] = 0x40  ; 
+  data[1] = 0x6C; 
+  data[2] =0x60; 
+  data[3] = 0x00; // Sub-index
+  data[4] = 0x00;         // COB-ID LSB
+  data[5] = 0x00; 
+  data[6] = 0x00;
+  data[7] = 0x00;
+  msg.pui8MsgData=data;
+
+  tCANMsgObject recv;
+  recv.ui32MsgID = 0x580 + nodeID; // SDO Receive
+  msg.ui32MsgIDMask = 0;
+  recv.ui32Flags = MSG_OBJ_RX_INT_ENABLE | MSG_OBJ_USE_ID_FILTER;
+
+  CANMessageSet(CAN0_BASE, 3, &msg, MSG_OBJ_TYPE_TX);
+  delay(1000);
+  CANMessageSet(CAN0_BASE, 4 , &recv, MSG_OBJ_TYPE_RX);
+  CANMessageGet(CAN0_BASE, 4, &recv, MSG_OBJ_TYPE_RX);
+  
+
+}
+
+
+
+
+void  deactivate_TPDO4(uint8_t nodeID) {
+  tCANMsgObject msg;
+
+  uint8_t data[8];
+//   uint8_t datareceive[8];// node 1, index 1A03h, sub 01h, 4 bytes
+
+uint32_t COB_Obj=0x00000480 | nodeID;
+
+
+  msg.ui32MsgID = 0x600 + nodeID; // SDO Receive
+  msg.ui32MsgIDMask = 0;
+  msg.ui32Flags = 0;
+  msg.ui32MsgLen = 8;
+  data[0] = 0x23; 
+  data[1] = 0x03; 
+  data[2] =0x18; 
+  data[3] = 0x01; // Sub-index
+  
+  data[4] = COB_Obj & 0xFF;         // COB-ID LSB
+  data[5] = (COB_Obj >> 8) & 0xFF; 
+  data[6] = (COB_Obj >> 16) & 0xFF;
+  data[7] = (COB_Obj >> 24) & 0xFF;
+  msg.pui8MsgData=data;
+  CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
+  Serial.println("Finnn");
+  
+
+  
+  }
+
+ // Disable TPDO4 (Set Valid Bit)
+void disable_TPDO4(uint8_t nodeID) {
+  tCANMsgObject msg;
+  uint8_t data[8]={0};
+  uint32_t cob_id = 0x80000480 | nodeID; // Set bit 31 + TPDO4 base COB-ID
+
+  // SDO Write: Index 0x1803, Sub-index 0x01 (COB-ID)
+  data[0] = 0x23; // 4-byte expedited write
+  data[1] = 0x03; // Index LSB (0x1803)
+  data[2] = 0x18; // Index MSB
+  data[3] = 0x01; // Sub-index
+  // Little-endian COB-ID with bit 31 set
+  memcpy(&data[4], &cob_id, sizeof(cob_id));
+
+  msg.ui32MsgID = 0x600 + nodeID;
+  msg.ui32Flags = MSG_OBJ_TX_INT_ENABLE;
+  msg.ui32MsgLen = 8;
+  msg.pui8MsgData = data;
+  CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
+}
+
+// Configure TPDO4 Mapping
+void configure_TPDO4_mapping(uint8_t nodeID) {
+  tCANMsgObject msg;
+  uint8_t data[8];
+
+  // Clear existing mappings (Sub-index 0x00 = 0)
+  data[0] = 0x2F; // 1-byte expedited write
+  data[1] = 0x03; // Index LSB (0x1A03)
+  data[2] = 0x1A; // Index MSB
+  data[3] = 0x00; // Sub-index
+  data[4] = 0x00; // Value (0 mappings)
+  data[5] = 0x00; // Unused
+  data[6] = 0x00;
+  data[7] = 0x00;
+
+  msg.ui32MsgID = 0x600 + nodeID;
+  msg.ui32Flags = MSG_OBJ_TX_INT_ENABLE;
+  msg.ui32MsgLen = 8;
+  msg.pui8MsgData = data;
+  CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
+
+  // Map Velocity (606Ch:00h, 32-bit)
+  uint32_t mapping = 0x606C0020; // Object 606Ch, sub 00h, 32 bits
+  data[0] = 0x23; // 4-byte write
+  data[1] = 0x03; // Index LSB (0x1A03)
+  data[2] = 0x1A;
+  data[3] = 0x01; // Sub-index 01h
+  memcpy(&data[4], &mapping, sizeof(mapping));
+
+  CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
+
+  // Activate 1 mapping
+  data[0] = 0x2F; // 1-byte write
+  data[4] = 0x01; // 1 mapped object
+  CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
+}
+
+// Set Transmission Type to Event-Driven
+void set_TPDO4_transmission(uint8_t nodeID) {
+  tCANMsgObject msg;
+  uint8_t data[8];
+
+  data[0] = 0x2F; // 1-byte expedited write
+  data[1] = 0x03; // Index LSB (0x1803)
+  data[2] = 0x18; // Index MSB
+  data[3] = 0x02; // Sub-index (Transmission Type)
+  data[4] = 0xFF; // Event-driven (0xFF)
+  data[5] = 0x00; // Unused
+  data[6] = 0x00;
+  data[7] = 0x00;
+
+  msg.ui32MsgID = 0x600 + nodeID;
+  msg.ui32Flags = MSG_OBJ_TX_INT_ENABLE;
+  msg.ui32MsgLen = 8;
+  msg.pui8MsgData = data;
+  CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
+}
+
+// Enable TPDO4 (Clear Valid Bit)
+void enable_TPDO4(uint8_t nodeID) {
+  tCANMsgObject msg;
+  uint8_t data[8];
+  uint32_t cob_id = 0x00000480 | nodeID; // Clear bit 31
+
+  data[0] = 0x23; // 4-byte expedited write
+  data[1] = 0x03; // Index LSB (0x1803)
+  data[2] = 0x18;
+  data[3] = 0x01; // Sub-index
+  memcpy(&data[4], &cob_id, sizeof(cob_id));
+
+  msg.ui32MsgID = 0x600 + nodeID;
+  msg.ui32Flags = MSG_OBJ_TX_INT_ENABLE;
+  msg.ui32MsgLen = 8;
+  msg.pui8MsgData = data;
+  CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
+}
+
+void CAN_handle_tpdo(uint8_t node_id) {
+  tCANMsgObject msg;
+    uint8_t data[8];
+    msg.pui8MsgData = data;
+    msg.ui32MsgID= 0x1803 +node_id;
+    msg.ui32MsgLen = 8;
+    msg.ui32Flags = MSG_OBJ_RX_INT_ENABLE;
+   msg.pui8MsgData = data;
+    
+    // Extract node_id from COB-ID (0x480 + node_id)
+    // uint8_t node_id = msg.ui32MsgID - 0x480;
+    
+  
+ 
+  Serial.println("Mail 3");
+  CANMessageGet(CAN0_BASE, 3, &msg, 0); // Mailbox 3 for TPDO4
+  int8_t rpm = (data[0] << 0)  | 
+                      (data[1] << 8)  | 
+                      (data[2] << 16) | 
+                      (data[3] << 24)|(data[4] << 32)  | 
+                      (data[5] << 40)  | 
+                      (data[6] << 48) | 
+                      (data[7] << 56);
+      int32_t velocity;
+      Serial.print("RpmVAL");
+      Serial.println(rpm);
+    
+  }
+
+
 
 void CAN_ackEr()
 {
@@ -52,7 +244,7 @@ void CAN_NMT_MODE(byte mode, uint8_t addr_node)
 {
   tCANMsgObject canMessage;
   uint8_t dataBuffer[8];
-  uint8_t node_id = 0x00; // All nodes
+  // uint8_t node_id = 0x00; // All nodes
   dataBuffer[0] = mode;
   dataBuffer[1] = addr_node;
 
@@ -70,7 +262,7 @@ void CAN_NMT_MODE(byte mode, uint8_t addr_node)
 void CAN_send_SYNC()
 {
   tCANMsgObject msg;
-  uint8_t dataBuffer[8];
+  // uint8_t dataBuffer[8];
 
   msg.ui32MsgID = 0x080;
   msg.ui32MsgLen = 0;
@@ -80,26 +272,59 @@ void CAN_send_SYNC()
   CANMessageSet(CAN0_BASE, 4, &msg, MSG_OBJ_TYPE_TX);
 }
 
-void CAN_read_actual_velocity(uint8_t nodeID)
-{
+
+
+
+
+    
+void emergencystop(uint8_t nodeID) {
   tCANMsgObject msg;
   uint8_t data[8];
 
-  data[0] = 0x40;
-  data[1] = 0x6C;
-  data[2] = 0x60;
-  data[3] = 0x00;
+  msg.ui32MsgID = 0x80 + nodeID; // SDO Receive
+  msg.ui32MsgIDMask = 0;
+  msg.ui32Flags = 0;
+  msg.ui32MsgLen = 8;
+  data[0] = 0x4A; 
+  data[1] = 0xFF; 
+  data[2] = 0x81; 
+  data[3] = 0x00; 
+  data[4] = 0x00;  // emergency stop  
+  
   data[5] = 0x00;
   data[6] = 0x00;
   data[7] = 0x00;
-
-  msg.ui32MsgID = 0x600 + nodeID;
-  msg.ui32MsgLen = 8;
-  msg.ui32Flags = MSG_OBJ_TX_INT_ENABLE;
   msg.pui8MsgData = data;
+  CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
+  Serial.println("Tralalero tralala");
+  }
 
-  CANMessageSet(CAN0_BASE, 3, &msg, MSG_OBJ_TYPE_TX);
-}
+
+
+void clearemergency(uint8_t nodeID) {
+  tCANMsgObject msg;
+  uint8_t data[8];
+
+  msg.ui32MsgID = 0x80 + nodeID; // SDO Receive
+  msg.ui32MsgIDMask = 0;
+  msg.ui32Flags = 0;
+  msg.ui32MsgLen = 8;
+  data[0] = 0x00; 
+  data[1] = 0x00;
+  data[2] = 0x00; 
+  data[3] = 0x00;
+  data[4]=0x00;  // emergency stop clearing 
+  
+  data[5] = 0x00;
+  data[6] = 0x00;
+  data[7] = 0x00;
+  msg.pui8MsgData = data;
+  CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
+  Serial.println("Error cleared");
+  }
+
+
+
 
 void CAN_send_target_velocity(uint8_t nodeID, uint32_t velocity)
 { 
@@ -150,7 +375,7 @@ void CAN_state_trans(uint8_t addr_node, uint8_t transition)
   dataBuffer[6] = 0x00;
   dataBuffer[7] = 0x00;
 
-  canMessage.ui32MsgID = 0x600 + addr_node;     // NMT COB-ID
+  canMessage.ui32MsgID = 0x600 + addr_node;     // COB-ID
   canMessage.ui32MsgIDMask = 0;                 // Not used for sending
   canMessage.ui32Flags = MSG_OBJ_TX_INT_ENABLE; // Transmit message
   canMessage.ui32MsgLen = 8;
@@ -180,6 +405,35 @@ void CAN_work_mode(uint8_t mode, uint8_t nodeID)
   CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
   Serial.println("Set Operation Mode to Profile Velocity");
 }
+
+//Generic sdo send can be used to make new sdo commands
+void CAN_send_sdo(uint8_t node_id, uint16_t index, uint8_t subindex, uint32_t value) {
+  tCANMsgObject msg;
+  uint8_t sdo_data[8] = {0};
+  uint8_t data[4]={0};
+  data[0] = (value) & 0xFF;
+  data[1] = (value >> 8) & 0xFF;
+  data[2] = (value >> 16) & 0xFF;
+  data[3] = (value >> 24) & 0xFF;
+
+  // SDO download initiate command (expedited, 4 bytes)
+  sdo_data[0] = 0x23; // CCS=1 (download), expedited, size indicated, 4 bytes
+  sdo_data[1] = index & 0xFF;        // Index low byte
+  sdo_data[2] = (index >> 8) & 0xFF; // Index high byte
+  sdo_data[3] = subindex;            // Sub-index
+  sdo_data[4] = data[0];
+  sdo_data[5] = data[1];
+  sdo_data[6] = data[2];
+  sdo_data[7] = data[3];
+
+  msg.ui32MsgID = 0x600 + node_id; // SDO client-to-server
+  msg.ui32MsgLen = 8;
+  msg.pui8MsgData = sdo_data;
+  msg.ui32Flags = MSG_OBJ_TX_INT_ENABLE;
+
+  CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
+}
+
 
 void CAN_acc_set(uint8_t addr_node, int16_t rpm)
 {
@@ -221,14 +475,14 @@ void CAN_acc_set(uint8_t addr_node, int16_t rpm)
 void CAN_INT_callback()
 {
   uint8_t CAN_Data[8];
-  tCANMsgObject CAN_MESSAGE_RECEIVE, CAN_MESSAGE_SEND;
-  volatile bool Error = 0;
+  tCANMsgObject CAN_MESSAGE_RECEIVE;
+  bool Error = 0;
   volatile bool RXFlag = 0;
   volatile uint8_t int_type_flag=0;
-  digitalWrite(PF_3, HIGH);
+  digitalWrite(PF_2, HIGH);
   unsigned long interrupt_status = CANIntStatus(CAN0_BASE, CAN_INT_STS_CAUSE);
-  Serial.print(interrupt_status);
-  Serial.println("hi");
+  // Serial.print(interrupt_status);
+  // Serial.println("hi");
   if (interrupt_status == CAN_INT_INTID_STATUS)
   {
     interrupt_status = CANStatusGet(CAN0_BASE, CAN_STS_CONTROL);
@@ -262,33 +516,50 @@ void CAN_INT_callback()
     RXFlag = 1;
     Error = 0;
   }
-
-  if (RXFlag == 1 and (int_type_flag==1 or int_type_flag==2))
+  else if(interrupt_status == 4)
   {
-    CANMessageGet(CAN0_BASE, 1, &CAN_MESSAGE_RECEIVE, 0);
+    CANIntClear(CAN0_BASE, 4);
+    Serial.println("intstat=4");
+    int_type_flag=4;
+    RXFlag = 1;
+    Error = 0;
+  }
+  else{Serial.println("New error popping");}
+
+  if (RXFlag == 1 and (int_type_flag==1 or int_type_flag==2) )
+  {
+    CANMessageGet(CAN0_BASE, 2, &CAN_MESSAGE_RECEIVE, 0);
     Serial.println("CAN MESSAGE ID:");
-    Serial.print(CAN_MESSAGE_RECEIVE.ui32MsgID, HEX);
-    Serial.println();
-    for (int j = 0; j < 8; j++)
-    {
-      Serial.print(CAN_Data[j]);
-      Serial.print('-');
-    }
-    Serial.println();
-    RXFlag = 0;}
+    Serial.println(CAN_MESSAGE_RECEIVE.ui32MsgID, HEX);
+    // Serial.println(Error);
+    // for (int j = 0; j < 8; j++)
+    // {
+    //   Serial.print(CAN_Data[j]);
+    //   Serial.print('-');
+    // }
+    Serial.println("Sus");
+    RXFlag = 0;
+  }
   else if(RXFlag==1){
+    tCANMsgObject recv;
     uint8_t data[8];
-    CAN_MESSAGE_RECEIVE.pui8MsgData = data;
-    CANMessageGet(CAN0_BASE, 3, &CAN_MESSAGE_RECEIVE, true);
-    if (true) {
-      int32_t velocity_value = (int32_t)((data[7] << 24) | (data[6] << 16) | (data[5] << 8) | data[4]);
-      Serial.print("Velocity Data:");
-      Serial.println(velocity_value);
+    recv.pui8MsgData = data;
+    
+    CANMessageGet(CAN0_BASE, 4, &recv, 0);
+    Serial.print("rpm: ");
+    uint32_t rpm =(recv.pui8MsgData[4]<<0|
+                (recv.pui8MsgData[5]<<8)|
+                (recv.pui8MsgData[6]<<16)|
+                (recv.pui8MsgData[7]<<24));
+    Serial.println(rpm);
+    
+    
   }
 
-  }    
-    digitalWrite(PF_3, LOW);
-  }
+  
+  if(Error==1){Serial.println("Brain fucked");}    
+  digitalWrite(PF_2, LOW);
+}  
   
 
 
@@ -347,7 +618,7 @@ void CAN_start(tCANMsgObject CAN_MESSAGE_RECEIVE, uint8_t CAN_Data_Buffer[8u])
   CANEnable(CAN0_BASE); // Enables CAN
 }
 
-Vel Motor_vel_ser()
+Vel Motor_vel_ser()//Message of type V Lint Rint $
 {
   String read_string = " ";
   if (Serial.available() > 1)
