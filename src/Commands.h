@@ -257,8 +257,7 @@ void CAN_NMT_MODE(byte mode, uint8_t addr_node)
   CANMessageSet(CAN0_BASE, 1, &canMessage, MSG_OBJ_TYPE_TX);
 }
 
-// Todo again 3rd time heart beat
-
+//Optional SYNC and Heartbeat message
 void CAN_send_SYNC()
 {
   tCANMsgObject msg;
@@ -272,62 +271,71 @@ void CAN_send_SYNC()
   CANMessageSet(CAN0_BASE, 4, &msg, MSG_OBJ_TYPE_TX);
 }
 
+//Optional
+void emcy(uint8_t nodeID) {
+  tCANMsgObject msg;
+  uint8_t data[8] = {0};
 
+  // EMCY COB-ID = 0x80 + Node-ID (little-endian format)
+  msg.ui32MsgID = 0x600 + nodeID; 
+  msg.ui32MsgIDMask = 0;
+  msg.ui32Flags = MSG_OBJ_TX_INT_ENABLE; // Enable TX interrupt
+  msg.ui32MsgLen = 8;
 
+  // Overspeed error code (0xFF31) in little-endian
+  data[0] = 0x31;    // Error code LSB
+  data[1] = 0xFF;    // Error code MSB
+  data[2] = 0x81;    // Error register (overspeed)
+  // Bytes 3-7: Manufacturer-specific (set to 0)
+
+  msg.pui8MsgData = data;
+  
+  // Use dedicated TX mailbox (e.g., mailbox 1)
+  CANMessageSet(CAN0_BASE, 5, &msg, MSG_OBJ_TYPE_TX);
+}
 
 
     
-void emergencystop(uint8_t nodeID) {
-  tCANMsgObject msg;
-  uint8_t data[8];
 
-  msg.ui32MsgID = 0x80 + nodeID; // SDO Receive
-  msg.ui32MsgIDMask = 0;
-  msg.ui32Flags = 0;
-  msg.ui32MsgLen = 8;
-  data[0] = 0x4A; 
-  data[1] = 0xFF; 
-  data[2] = 0x81; 
-  data[3] = 0x00; 
-  data[4] = 0x00;  // emergency stop  
+
+
+
+  void CAN_state_trans(uint8_t addr_node, uint8_t transition)
+  {
+    tCANMsgObject canMessage;
+    uint8_t dataBuffer[8];
+    // uint8_t node_id = 0x00; //All nodes
+    dataBuffer[0] = 0x2b;
+    dataBuffer[1] = 0x40;
+    dataBuffer[2] = 0x60;
+    dataBuffer[3] = 0x00;
+    dataBuffer[4] = transition;
+    dataBuffer[5] = 0x00;
+    dataBuffer[6] = 0x00;
+    dataBuffer[7] = 0x00;
   
-  data[5] = 0x00;
-  data[6] = 0x00;
-  data[7] = 0x00;
-  msg.pui8MsgData = data;
-  CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
-  Serial.println("Tralalero tralala");
-  }
-
-
-
-void clearemergency(uint8_t nodeID) {
-  tCANMsgObject msg;
-  uint8_t data[8];
-
-  msg.ui32MsgID = 0x80 + nodeID; // SDO Receive
-  msg.ui32MsgIDMask = 0;
-  msg.ui32Flags = 0;
-  msg.ui32MsgLen = 8;
-  data[0] = 0x00; 
-  data[1] = 0x00;
-  data[2] = 0x00; 
-  data[3] = 0x00;
-  data[4]=0x00;  // emergency stop clearing 
+    canMessage.ui32MsgID = 0x600 + addr_node;     // COB-ID
+    canMessage.ui32MsgIDMask = 0;                 // Not used for sending
+    canMessage.ui32Flags = MSG_OBJ_TX_INT_ENABLE; // Transmit message
+    canMessage.ui32MsgLen = 8;
+    canMessage.pui8MsgData = dataBuffer;
   
-  data[5] = 0x00;
-  data[6] = 0x00;
-  data[7] = 0x00;
-  msg.pui8MsgData = data;
-  CANMessageSet(CAN0_BASE, 1, &msg, MSG_OBJ_TYPE_TX);
-  Serial.println("Error cleared");
+    CANMessageSet(CAN0_BASE, 1, &canMessage, MSG_OBJ_TYPE_TX);
   }
-
-
+  
 
 
 void CAN_send_target_velocity(uint8_t nodeID, uint32_t velocity)
-{ 
+{ if (velocity==3678){
+    Serial.println("Emergency stop triggered");
+    CAN_state_trans(nodeID , 0x07);//quick stop
+    return;
+}
+  if (velocity==3679){
+    Serial.println("Enable after stop triggered");
+    CAN_state_trans(nodeID , 0x0F);//enable
+    return;
+  }
   uint8_t CAN_Data[8];
   digitalWrite(PF_2,HIGH);
   delay(100);
@@ -361,28 +369,7 @@ void CAN_send_target_velocity(uint8_t nodeID, uint32_t velocity)
     digitalWrite(PF_2,LOW);
   }
 
-void CAN_state_trans(uint8_t addr_node, uint8_t transition)
-{
-  tCANMsgObject canMessage;
-  uint8_t dataBuffer[8];
-  // uint8_t node_id = 0x00; //All nodes
-  dataBuffer[0] = 0x2b;
-  dataBuffer[1] = 0x40;
-  dataBuffer[2] = 0x60;
-  dataBuffer[3] = 0x00;
-  dataBuffer[4] = transition;
-  dataBuffer[5] = 0x00;
-  dataBuffer[6] = 0x00;
-  dataBuffer[7] = 0x00;
 
-  canMessage.ui32MsgID = 0x600 + addr_node;     // COB-ID
-  canMessage.ui32MsgIDMask = 0;                 // Not used for sending
-  canMessage.ui32Flags = MSG_OBJ_TX_INT_ENABLE; // Transmit message
-  canMessage.ui32MsgLen = 8;
-  canMessage.pui8MsgData = dataBuffer;
-
-  CANMessageSet(CAN0_BASE, 1, &canMessage, MSG_OBJ_TYPE_TX);
-}
 
 void CAN_work_mode(uint8_t mode, uint8_t nodeID)
 {
@@ -524,6 +511,14 @@ void CAN_INT_callback()
     RXFlag = 1;
     Error = 0;
   }
+  else if(interrupt_status == 5)
+  {
+    CANIntClear(CAN0_BASE, 5);
+    Serial.println("intstat=5");
+    int_type_flag=4;
+    RXFlag = 1;
+    Error = 0;
+  }
   else{Serial.println("New error popping");}
 
   if (RXFlag == 1 and (int_type_flag==1 or int_type_flag==2) )
@@ -540,7 +535,7 @@ void CAN_INT_callback()
     Serial.println("Sus");
     RXFlag = 0;
   }
-  else if(RXFlag==1){
+  else if(RXFlag==1&& int_type_flag==4){
     tCANMsgObject recv;
     uint8_t data[8];
     recv.pui8MsgData = data;
@@ -629,6 +624,19 @@ Vel Motor_vel_ser()//Message of type V Lint Rint $
       char c = Serial.read();
       if (c == '$')
         break;
+      else if(c=='e')
+      {
+        Serial.println("inside estop func");
+        Vel vel = {3678,3678};
+        return vel;
+
+      delay(2000);
+      }
+      else if(c=='r'){
+        Serial.println("Enable after stop");
+        Vel vel = {3679,3679};
+        return vel;
+      }
 
       read_string += c;
       delay(1);
@@ -657,6 +665,14 @@ Vel Motor_vel_ser()//Message of type V Lint Rint $
         int16_t vel_L = vel_L_str.toInt();
         Vel vel = {vel_L, vel_R};
         return vel;
+      }
+
+      else if (read_string.indexOf("Shutdown") != -1)
+      {
+        Serial.println("Shutdown command received");
+        // Perform shutdown actions here
+        // For example, stop motors, save state, etc.
+        CAN_NMT_MODE(0x08, 0x00);       // NMT set to operational
       }
     }
   }
