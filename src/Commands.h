@@ -561,15 +561,15 @@ void CAN_INT_callback()
 void motor_startup(uint8_t addr_node,uint8_t work_mode,uint8_t NMT_mode)
 {
   CAN_NMT_MODE(NMT_mode, addr_node);       // NMT set to operational
-  CAN_work_mode(work_mode, addr_node);      // sets profile velocity
-  CAN_state_trans(addr_node, 0x06); // Enable voltage quick stop
+  // CAN_work_mode(work_mode, addr_node);      // sets profile velocity
+  // CAN_state_trans(addr_node, 0x06); // Enable voltage quick stop
   delay(1);
-  CAN_state_trans(addr_node, 0x07); // switch on
+  // CAN_state_trans(addr_node, 0x07); // switch on
   delay(1);                         // can't directly switch on and enable needs quick stop
-  CAN_state_trans(addr_node, 0x0F); // enable
+  // CAN_state_trans(addr_node, 0x0F); // enable
   delay(1);
-  CAN_acc_set(addr_node, 1000);  // sets accn to 1000 rpm
-  CAN_acc_set(addr_node, -1000); // sets decn to 1000 rpm
+  // CAN_acc_set(addr_node, 1000);  // sets accn to 1000 rpm
+  // CAN_acc_set(addr_node, -1000); // sets decn to 1000 rpm
   delay(1);
 }
 

@@ -50,15 +50,15 @@ void loop() {
     // CAN_state_trans(motorL_ID,0x80);
 
     // Serial.println("100");
-    vel_setpoint = Motor_vel_ser();
-    if(vel_setpoint.vel_L != vel_setpoint_old.vel_L and vel_setpoint.vel_L!=-1){
-    CAN_send_target_velocity(motorL_ID,vel_setpoint.vel_L);}
-    if(vel_setpoint.vel_R != vel_setpoint_old.vel_R and vel_setpoint.vel_R!=-1){
-    CAN_send_target_velocity(motorR_ID,vel_setpoint.vel_R);}
-    vel_setpoint_old=vel_setpoint;
+    // vel_setpoint = Motor_vel_ser();
+    // if(vel_setpoint.vel_L != vel_setpoint_old.vel_L and vel_setpoint.vel_L!=-1){
+    // CAN_send_target_velocity(motorL_ID,vel_setpoint.vel_L);}
+    // if(vel_setpoint.vel_R != vel_setpoint_old.vel_R and vel_setpoint.vel_R!=-1){
+    // CAN_send_target_velocity(motorR_ID,vel_setpoint.vel_R);}
+    // vel_setpoint_old=vel_setpoint;
     if (millis()-start>5000){
-        SDO_upload_initiate(motorL_ID);
-        SDO_upload_initiate(motorR_ID);
+        // SDO_upload_initiate(motorL_ID);
+        // SDO_upload_initiate(motorR_ID);
         start=millis();
         
     }
